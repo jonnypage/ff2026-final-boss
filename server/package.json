@@ -1,0 +1,17 @@
+{
+  "name": "ff2026-final-boss-server",
+  "version": "1.0.0",
+  "description": "Freedom Fighters boss HP server: events from ESP32, WebSocket to boss/admin views, WLED integration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "socket.io": "^4.7.5"
+  }
+}

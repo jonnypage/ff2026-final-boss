@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Freedom Fighters – Boss</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0d0d0d;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: clamp(1.5rem, 4vw, 2.5rem);
+      margin-bottom: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #f0a030;
+    }
+    .hp-container {
+      width: min(90vw, 800px);
+      margin: 1rem 0;
+    }
+    .hp-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 0.5rem;
+      font-size: 1.25rem;
+    }
+    .hp-bar-wrap {
+      height: 48px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid #333;
+    }
+    .hp-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #c0392b, #e74c3c);
+      border-radius: 6px;
+      transition: width 0.4s ease, background 0.3s;
+    }
+    .hp-bar.mid { background: linear-gradient(90deg, #d68910, #f4d03f); }
+    .hp-bar.high { background: linear-gradient(90deg, #1e8449, #2ecc71); }
+    .hp-bar.zero { background: #333; }
+    .crystals {
+      margin-top: 1.5rem;
+      font-size: 1.1rem;
+      color: #aaa;
+    }
+    .game-over {
+      margin-top: 1.5rem;
+      font-size: clamp(1.5rem, 5vw, 3rem);
+      font-weight: 700;
+      color: #e74c3c;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .game-over.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Freedom Fighters – Boss</h1>
+  <div class="hp-container">
+    <div class="hp-label">
+      <span>Boss HP</span>
+      <span id="hp-text">-- / --</span>
+    </div>
+    <div class="hp-bar-wrap">
+      <div class="hp-bar" id="hp-bar" style="width: 100%"></div>
+    </div>
+  </div>
+  <div class="crystals" id="crystals">Crystals this round: 0</div>
+  <div class="game-over hidden" id="game-over">Boss defeated</div>
+
+  <script>
+    const socket = io();
+    const hpText = document.getElementById('hp-text');
+    const hpBar = document.getElementById('hp-bar');
+    const crystalsEl = document.getElementById('crystals');
+    const gameOverEl = document.getElementById('game-over');
+
+    function render(state) {
+      const { bossHp, maxHp, crystalCount, gameOver } = state;
+      hpText.textContent = bossHp + ' / ' + maxHp;
+      const pct = maxHp ? (bossHp / maxHp) * 100 : 0;
+      hpBar.style.width = pct + '%';
+      hpBar.classList.remove('high', 'mid', 'zero');
+      if (pct <= 0) hpBar.classList.add('zero');
+      else if (pct <= 66) hpBar.classList.add('mid');
+      else hpBar.classList.add('high');
+      crystalsEl.textContent = 'Crystals this round: ' + (crystalCount || 0);
+      gameOverEl.classList.toggle('hidden', !gameOver);
+    }
+
+    socket.on('state', render);
+    fetch('/state').then(r => r.json()).then(render).catch(() => {});
+  </script>
+</body>
+</html>

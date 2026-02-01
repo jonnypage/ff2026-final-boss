@@ -1,0 +1,7 @@
+{
+  "name": "ff2026-final-boss",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  }
+}

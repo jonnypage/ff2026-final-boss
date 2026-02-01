@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Freedom Fighters – Admin</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 1rem; color: #a0a0ff; }
+    section {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+      max-width: 600px;
+    }
+    section h2 { font-size: 1rem; margin-bottom: 0.75rem; color: #ccc; }
+    .row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    input[type="number"] { width: 80px; padding: 0.4rem; border-radius: 4px; border: 1px solid #333; background: #0d0d0d; color: #eee; }
+    button {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    button.primary { background: #3498db; color: #fff; }
+    button.primary:hover { background: #2980b9; }
+    button.danger { background: #c0392b; color: #fff; }
+    button.danger:hover { background: #a93226; }
+    button.success { background: #27ae60; color: #fff; }
+    button.success:hover { background: #1e8449; }
+    .status { font-size: 0.9rem; color: #8f8; margin-top: 0.5rem; }
+    .status.err { color: #f88; }
+    .events {
+      font-family: ui-monospace, monospace;
+      font-size: 0.8rem;
+      max-height: 200px;
+      overflow-y: auto;
+      background: #0d0d0d;
+      padding: 0.5rem;
+      border-radius: 4px;
+      margin-top: 0.5rem;
+    }
+    .events div { padding: 0.2rem 0; border-bottom: 1px solid #222; }
+    .events div:last-child { border-bottom: none; }
+  </style>
+</head>
+<body>
+  <h1>Freedom Fighters – Admin</h1>
+
+  <section>
+    <h2>Boss state</h2>
+    <p id="state-summary">HP: -- / -- | Crystals: -- | Game over: --</p>
+  </section>
+
+  <section>
+    <h2>Set HP</h2>
+    <div class="row">
+      <input type="number" id="hp-input" min="0" placeholder="HP" />
+      <button class="primary" id="btn-set-hp">Set HP</button>
+    </div>
+    <p class="status" id="hp-status"></p>
+  </section>
+
+  <section>
+    <h2>Game control</h2>
+    <div class="row">
+      <button class="success" id="btn-reset">Reset game</button>
+    </div>
+    <p class="status" id="reset-status"></p>
+  </section>
+
+  <section>
+    <h2>Recent events</h2>
+    <div class="events" id="events"></div>
+  </section>
+
+  <script>
+    const socket = io();
+    const stateSummary = document.getElementById('state-summary');
+    const hpInput = document.getElementById('hp-input');
+    const btnSetHp = document.getElementById('btn-set-hp');
+    const hpStatus = document.getElementById('hp-status');
+    const btnReset = document.getElementById('btn-reset');
+    const resetStatus = document.getElementById('reset-status');
+    const eventsEl = document.getElementById('events');
+
+    function showStatus(el, msg, isErr) {
+      el.textContent = msg;
+      el.classList.toggle('err', !!isErr);
+      if (msg) setTimeout(() => { el.textContent = ''; }, 3000);
+    }
+
+    function renderState(state) {
+      const { bossHp, maxHp, crystalCount, gameOver } = state;
+      stateSummary.textContent = `HP: ${bossHp} / ${maxHp} | Crystals this round: ${crystalCount} | Game over: ${gameOver ? 'Yes' : 'No'}`;
+      hpInput.placeholder = String(maxHp);
+      eventsEl.innerHTML = (state.recentEvents || [])
+        .slice(0, 15)
+        .map(e => {
+          const t = new Date(e.ts).toLocaleTimeString();
+          if (e.type === 'crystal') return `${t} Crystal slot ${e.slot}${e.damage ? ' (-' + e.damage + ' HP)' : ''}`;
+          if (e.type === 'admin_hp') return `${t} Admin set HP to ${e.hp}`;
+          if (e.type === 'admin_reset') return `${t} Admin reset game`;
+          return `${t} ${JSON.stringify(e)}`;
+        })
+        .map(s => `<div>${s}</div>`)
+        .join('');
+    }
+
+    socket.on('state', renderState);
+    fetch('/state').then(r => r.json()).then(renderState).catch(() => {});
+
+    btnSetHp.addEventListener('click', () => {
+      const hp = parseInt(hpInput.value, 10);
+      if (Number.isNaN(hp) || hp < 0) {
+        showStatus(hpStatus, 'Enter a valid HP', true);
+        return;
+      }
+      fetch('/admin/hp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hp }),
+      })
+        .then(r => r.json())
+        .then(d => {
+          showStatus(hpStatus, d.ok ? 'HP updated' : (d.error || 'Failed'), !d.ok);
+          if (d.ok) hpInput.value = '';
+        })
+        .catch(() => showStatus(hpStatus, 'Request failed', true));
+    });
+
+    btnReset.addEventListener('click', () => {
+      fetch('/admin/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(r => r.json())
+        .then(d => {
+          showStatus(resetStatus, d.ok ? 'Game reset' : 'Failed', !d.ok);
+        })
+        .catch(() => showStatus(resetStatus, 'Request failed', true));
+    });
+  </script>
+</body>
+</html>
