@@ -4,11 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Freedom Fighters – Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=New+Rocker&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: 'New Rocker', system-ui, -apple-system, sans-serif;
       background: #1a1a2e;
       color: #eee;
       min-height: 100vh;
@@ -53,6 +57,98 @@
     }
     .events div { padding: 0.2rem 0; border-bottom: 1px solid #222; }
     .events div:last-child { border-bottom: none; }
+    .slots-row { display: flex; gap: 0.35rem; margin-top: 0.5rem; flex-wrap: wrap; }
+    .slots-row .slot { display: flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; color: #555; }
+    .slots-row .slot.filled { color: #2ecc71; }
+    .slots-row .slot i { width: 1rem; height: 1rem; }
+    .admin-hp-bar {
+      position: relative;
+      display: flex;
+      flex-flow: row nowrap;
+      margin-top: 0.5rem;
+      width: 100%;
+      height: 1.5rem;
+      border-radius: 0.35rem;
+      overflow: hidden;
+      box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.3);
+    }
+    .admin-hp-bar .health-bar-label {
+      position: absolute;
+      z-index: 10;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-weight: bold;
+      font-size: 0.75rem;
+      color: #fff;
+      text-shadow: 0 0 2px #000;
+    }
+    .admin-hp-bar .health-bar-value {
+      position: relative;
+      width: calc(100% * var(--bar-value, 100) / var(--bar-value-max, 100));
+      height: 100%;
+      border-radius: 0.2rem;
+      transition: width 0.3s ease-out;
+    }
+    .admin-hp-bar .health-bar-value.damaged { border-radius: 0.2rem 0 0 0.2rem; }
+    .admin-hp-bar .health-bar-value.low { background: linear-gradient(180deg, #771a1a, #c0392b); }
+    .admin-hp-bar .health-bar-value.mid { background: linear-gradient(180deg, #8a6b0a, #d68910); }
+    .admin-hp-bar .health-bar-value.high { background: linear-gradient(180deg, #1e8449, #2ecc71); }
+    .admin-hp-bar .health-bar-value.zero { background: #333; }
+    .admin-hp-bar .health-bar-damage {
+      position: absolute;
+      left: calc(100% * var(--bar-offset, 0) / var(--bar-value-max, 100));
+      width: calc(100% * var(--bar-damage, 0) / var(--bar-value-max, 100));
+      height: 100%;
+      background: rgba(255,255,255,0.8);
+      pointer-events: none;
+    }
+    .admin-hp-bar .health-bar-damage.animate {
+      animation: admin-damage-fall 0.4s ease-in forwards;
+    }
+    @keyframes admin-damage-fall {
+      to { transform: translateY(1rem); opacity: 0; }
+    }
+    .phase-desc { font-size: 0.85rem; color: #999; margin-bottom: 0.5rem; }
+    .phase-toggle .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      cursor: pointer;
+    }
+    .phase-toggle input[type="checkbox"] {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: relative;
+      width: 2.5rem;
+      height: 1.25rem;
+      background: #333;
+      border-radius: 1.25rem;
+      transition: background 0.2s;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 1rem;
+      height: 1rem;
+      left: 0.15rem;
+      top: 0.125rem;
+      background: #888;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .phase-toggle input:checked + .toggle-slider {
+      background: #27ae60;
+    }
+    .phase-toggle input:checked + .toggle-slider::before {
+      transform: translateX(1.2rem);
+      background: #fff;
+    }
+    .toggle-label { font-size: 0.9rem; }
   </style>
 </head>
 <body>
@@ -60,7 +156,12 @@
 
   <section>
     <h2>Boss state</h2>
-    <p id="state-summary">HP: -- / -- | Crystals: -- | Game over: --</p>
+    <p id="state-summary">Crystals: -- | Game over: --</p>
+    <div class="admin-hp-bar" id="admin-hp-container">
+      <span class="health-bar-label" id="admin-hp-label">-- / --</span>
+      <div class="health-bar-value" id="admin-hp-bar"></div>
+    </div>
+    <div class="slots-row" id="slots-row" title="Slot states (filled = crystal in)"></div>
   </section>
 
   <section>
@@ -68,8 +169,22 @@
     <div class="row">
       <input type="number" id="hp-input" min="0" placeholder="HP" />
       <button class="primary" id="btn-set-hp">Set HP</button>
+      <button class="danger" id="btn-reduce-hp">−5%</button>
     </div>
     <p class="status" id="hp-status"></p>
+  </section>
+
+  <section>
+    <h2>Phase / Crystal damage</h2>
+    <p class="phase-desc">Phase 1: crystals reduce HP. Phase 2: crystals do not.</p>
+    <div class="row phase-toggle">
+      <label class="toggle-wrap">
+        <input type="checkbox" id="hp-damage-toggle" checked />
+        <span class="toggle-slider"></span>
+        <span class="toggle-label" id="phase-label">Phase 1 (damage on)</span>
+      </label>
+    </div>
+    <p class="status" id="phase-status"></p>
   </section>
 
   <section>
@@ -88,12 +203,21 @@
   <script>
     const socket = io();
     const stateSummary = document.getElementById('state-summary');
+    const slotsRow = document.getElementById('slots-row');
+    const adminHpContainer = document.getElementById('admin-hp-container');
+    const adminHpLabel = document.getElementById('admin-hp-label');
+    const adminHpBar = document.getElementById('admin-hp-bar');
     const hpInput = document.getElementById('hp-input');
+    let prevBossHp = null;
     const btnSetHp = document.getElementById('btn-set-hp');
+    const btnReduceHp = document.getElementById('btn-reduce-hp');
     const hpStatus = document.getElementById('hp-status');
     const btnReset = document.getElementById('btn-reset');
     const resetStatus = document.getElementById('reset-status');
     const eventsEl = document.getElementById('events');
+    const hpDamageToggle = document.getElementById('hp-damage-toggle');
+    const phaseLabel = document.getElementById('phase-label');
+    const phaseStatus = document.getElementById('phase-status');
 
     function showStatus(el, msg, isErr) {
       el.textContent = msg;
@@ -101,17 +225,56 @@
       if (msg) setTimeout(() => { el.textContent = ''; }, 3000);
     }
 
+    function pctTier(pct) {
+      if (pct <= 0) return 'zero';
+      if (pct <= 25) return 'low';
+      if (pct <= 66) return 'mid';
+      return 'high';
+    }
+
     function renderState(state) {
-      const { bossHp, maxHp, crystalCount, gameOver } = state;
-      stateSummary.textContent = `HP: ${bossHp} / ${maxHp} | Crystals this round: ${crystalCount} | Game over: ${gameOver ? 'Yes' : 'No'}`;
+      const { bossHp, maxHp, crystalCount, slots = [], gameOver, hpDamageEnabled } = state;
+      hpDamageToggle.checked = hpDamageEnabled !== false;
+      phaseLabel.textContent = hpDamageEnabled ? 'Phase 1 (damage on)' : 'Phase 2 (damage off)';
+      const m = Math.max(1, maxHp);
+      stateSummary.textContent = `Crystals: ${crystalCount} | Game over: ${gameOver ? 'Yes' : 'No'}`;
       hpInput.placeholder = String(maxHp);
+      adminHpContainer.style.setProperty('--bar-value-max', m);
+      adminHpLabel.textContent = bossHp + ' / ' + maxHp;
+
+      if (prevBossHp !== null && bossHp < prevBossHp) {
+        const damage = prevBossHp - bossHp;
+        adminHpContainer.style.setProperty('--bar-value', bossHp);
+        adminHpBar.classList.add('damaged');
+        adminHpBar.classList.remove('high', 'mid', 'low', 'zero');
+        adminHpBar.classList.add(pctTier(maxHp ? (bossHp / maxHp) * 100 : 0));
+        const dmgEl = document.createElement('div');
+        dmgEl.className = 'health-bar-damage animate';
+        dmgEl.style.setProperty('--bar-value-max', m);
+        dmgEl.style.setProperty('--bar-offset', bossHp);
+        dmgEl.style.setProperty('--bar-damage', damage);
+        adminHpBar.after(dmgEl);
+        dmgEl.addEventListener('animationend', () => dmgEl.remove());
+      } else {
+        adminHpContainer.style.setProperty('--bar-value', bossHp);
+        adminHpBar.classList.remove('damaged', 'high', 'mid', 'low', 'zero');
+        adminHpBar.classList.add(pctTier(maxHp ? (bossHp / maxHp) * 100 : 0));
+      }
+      prevBossHp = bossHp;
+
+      const arr = (slots.length ? slots : Array(7).fill(false)).slice(0, 7);
+      slotsRow.innerHTML = arr.map((filled, i) => '<div class="slot' + (filled ? ' filled' : '') + '" title="Slot ' + (i + 1) + '"><i data-lucide="gem"></i></div>').join('');
+      lucide.createIcons();
       eventsEl.innerHTML = (state.recentEvents || [])
         .slice(0, 15)
         .map(e => {
           const t = new Date(e.ts).toLocaleTimeString();
-          if (e.type === 'crystal') return `${t} Crystal slot ${e.slot}${e.damage ? ' (-' + e.damage + ' HP)' : ''}`;
+          if (e.type === 'crystal_insert') return `${t} Slot ${e.slot + 1} inserted (-${e.damage || 10} HP)`;
+          if (e.type === 'crystal_remove') return `${t} Slot ${e.slot + 1} removed`;
           if (e.type === 'admin_hp') return `${t} Admin set HP to ${e.hp}`;
+          if (e.type === 'admin_hp_reduce') return `${t} Admin −5% (${e.damage} HP) → ${e.hp}`;
           if (e.type === 'admin_reset') return `${t} Admin reset game`;
+          if (e.type === 'admin_hp_damage') return `${t} Admin ${e.enabled ? 'Phase 1' : 'Phase 2'} (crystal damage ${e.enabled ? 'on' : 'off'})`;
           return `${t} ${JSON.stringify(e)}`;
         })
         .map(s => `<div>${s}</div>`)
@@ -138,6 +301,29 @@
           if (d.ok) hpInput.value = '';
         })
         .catch(() => showStatus(hpStatus, 'Request failed', true));
+    });
+
+    btnReduceHp.addEventListener('click', () => {
+      fetch('/admin/hp/reduce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+        .then(r => r.json())
+        .then(d => {
+          showStatus(hpStatus, d.ok ? `−${d.damage} HP` : 'Failed', !d.ok);
+        })
+        .catch(() => showStatus(hpStatus, 'Request failed', true));
+    });
+
+    hpDamageToggle.addEventListener('change', () => {
+      const enabled = hpDamageToggle.checked;
+      fetch('/admin/hp-damage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+        .then(r => r.json())
+        .then(d => {
+          showStatus(phaseStatus, d.ok ? (enabled ? 'Phase 1: damage on' : 'Phase 2: damage off') : 'Failed', !d.ok);
+        })
+        .catch(() => showStatus(phaseStatus, 'Request failed', true));
     });
 
     btnReset.addEventListener('click', () => {

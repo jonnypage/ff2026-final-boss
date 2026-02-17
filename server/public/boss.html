@@ -4,11 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Freedom Fighters – Boss</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=New+Rocker&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: system-ui, -apple-system, sans-serif;
+      font-family: 'New Rocker', system-ui, -apple-system, sans-serif;
       background: #0d0d0d;
       color: #eee;
       min-height: 100vh;
@@ -25,36 +29,130 @@
       letter-spacing: 0.1em;
       color: #f0a030;
     }
-    .hp-container {
-      width: min(90vw, 800px);
-      margin: 1rem 0;
+    .health-bar-wrap {
+      margin: 1.5rem 0;
+      width: clamp(320px, calc(100% - 2rem), 800px);
     }
-    .hp-label {
+    .health-bar-wrap.shake {
+      animation: hp-shake 0.4s ease-in-out;
+    }
+    @keyframes hp-shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+    .health-bar-container {
+      position: relative;
       display: flex;
-      justify-content: space-between;
-      margin-bottom: 0.5rem;
-      font-size: 1.25rem;
-    }
-    .hp-bar-wrap {
-      height: 48px;
-      background: #1a1a1a;
-      border-radius: 8px;
+      flex-flow: row nowrap;
+      width: 100%;
+      height: 2.5rem;
+      border-radius: 0.45rem;
       overflow: hidden;
-      border: 2px solid #333;
+      background: #1a1a1a;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.5);
     }
-    .hp-bar {
+    .health-bar-label {
+      position: absolute;
+      z-index: 10;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-weight: bold;
+      font-size: 1.1rem;
+      color: #fff;
+      text-shadow: 0 0 0.25rem #000, 0 1px 2px #000;
+    }
+    .health-bar-value {
+      position: relative;
+      width: calc(100% * var(--bar-value, 100) / var(--bar-value-max, 100));
       height: 100%;
-      background: linear-gradient(90deg, #c0392b, #e74c3c);
-      border-radius: 6px;
-      transition: width 0.4s ease, background 0.3s;
+      background: linear-gradient(180deg, #1e8449, #2ecc71);
+      border-radius: 0.25rem;
+      transition: width 0.35s ease-out;
     }
-    .hp-bar.mid { background: linear-gradient(90deg, #d68910, #f4d03f); }
-    .hp-bar.high { background: linear-gradient(90deg, #1e8449, #2ecc71); }
-    .hp-bar.zero { background: #333; }
+    .health-bar-value.damaged {
+      border-radius: 0.25rem 0 0 0.25rem;
+    }
+    .health-bar-value.low {
+      background: linear-gradient(180deg, #771a1a, #c0392b, #e74c3c);
+    }
+    .health-bar-value.mid {
+      background: linear-gradient(180deg, #8a6b0a, #d68910, #f4d03f);
+    }
+    .health-bar-value.high {
+      background: linear-gradient(180deg, #1e8449, #2ecc71);
+    }
+    .health-bar-value.zero {
+      background: #333;
+    }
+    .health-bar-tip {
+      position: absolute;
+      z-index: 5;
+      top: 50%;
+      right: 0;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 100%;
+      background: #e74c3c;
+      box-shadow: 0 0 0.5rem #e74c3c;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .health-bar-tip.flash {
+      animation: tip-flash 0.5s ease-out;
+    }
+    @keyframes tip-flash {
+      0% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    .health-bar-damage {
+      position: absolute;
+      left: calc(100% * var(--bar-offset, 0) / var(--bar-value-max, 100));
+      width: calc(100% * var(--bar-damage, 0) / var(--bar-value-max, 100));
+      height: 100%;
+      background: rgba(255, 255, 255, 0.85);
+      box-shadow: 0 0 0.5rem rgba(255,255,255,0.5);
+      pointer-events: none;
+    }
+    .health-bar-damage.animate {
+      animation: damage-fall 0.5s ease-in forwards;
+    }
+    @keyframes damage-fall {
+      to {
+        transform: translateY(2rem);
+        opacity: 0;
+      }
+    }
     .crystals {
-      margin-top: 1.5rem;
+      margin-top: 1rem;
       font-size: 1.1rem;
       color: #aaa;
+    }
+    .slots {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .slot {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2rem;
+      height: 2rem;
+      color: #555;
+      transition: color 0.2s;
+    }
+    .slot.filled {
+      color: #2ecc71;
+    }
+    .slot i {
+      width: 1.5rem;
+      height: 1.5rem;
     }
     .game-over {
       margin-top: 1.5rem;
@@ -68,36 +166,85 @@
   </style>
 </head>
 <body>
-  <h1>Freedom Fighters – Boss</h1>
-  <div class="hp-container">
-    <div class="hp-label">
-      <span>Boss HP</span>
-      <span id="hp-text">-- / --</span>
-    </div>
-    <div class="hp-bar-wrap">
-      <div class="hp-bar" id="hp-bar" style="width: 100%"></div>
+  <h1>The Ashen King</h1>
+  <div class="health-bar-wrap" id="hp-bar-wrap">
+    <div class="health-bar-container" id="hp-container">
+      <span class="health-bar-label" id="hp-label">-- / --</span>
+      <div class="health-bar-value" id="hp-bar">
+        <div class="health-bar-tip" id="hp-tip"></div>
+      </div>
     </div>
   </div>
-  <div class="crystals" id="crystals">Crystals this round: 0</div>
+  <div class="crystals" id="crystals">Crystals: 0</div>
+  <div class="slots" id="slots" aria-label="Crystal slots"></div>
   <div class="game-over hidden" id="game-over">Boss defeated</div>
 
   <script>
     const socket = io();
-    const hpText = document.getElementById('hp-text');
+    const hpBarWrap = document.getElementById('hp-bar-wrap');
+    const hpContainer = document.getElementById('hp-container');
+    const hpLabel = document.getElementById('hp-label');
     const hpBar = document.getElementById('hp-bar');
+    const hpTip = document.getElementById('hp-tip');
     const crystalsEl = document.getElementById('crystals');
+    const slotsEl = document.getElementById('slots');
     const gameOverEl = document.getElementById('game-over');
+    let prevBossHp = null;
+
+    function pctTier(pct) {
+      if (pct <= 0) return 'zero';
+      if (pct <= 25) return 'low';
+      if (pct <= 66) return 'mid';
+      return 'high';
+    }
 
     function render(state) {
-      const { bossHp, maxHp, crystalCount, gameOver } = state;
-      hpText.textContent = bossHp + ' / ' + maxHp;
-      const pct = maxHp ? (bossHp / maxHp) * 100 : 0;
-      hpBar.style.width = pct + '%';
-      hpBar.classList.remove('high', 'mid', 'zero');
-      if (pct <= 0) hpBar.classList.add('zero');
-      else if (pct <= 66) hpBar.classList.add('mid');
-      else hpBar.classList.add('high');
-      crystalsEl.textContent = 'Crystals this round: ' + (crystalCount || 0);
+      const { bossHp, maxHp, crystalCount, slots = [], gameOver } = state;
+      const m = Math.max(1, maxHp);
+
+      hpContainer.style.setProperty('--bar-value-max', m);
+
+      if (prevBossHp !== null && bossHp < prevBossHp) {
+        const damage = prevBossHp - bossHp;
+        hpContainer.style.setProperty('--bar-value', bossHp);
+        hpBar.classList.add('damaged');
+        hpBar.classList.remove('high', 'mid', 'low', 'zero');
+        hpBar.classList.add(pctTier(maxHp ? (bossHp / maxHp) * 100 : 0));
+
+        const dmgEl = document.createElement('div');
+        dmgEl.className = 'health-bar-damage animate';
+        dmgEl.style.setProperty('--bar-value-max', m);
+        dmgEl.style.setProperty('--bar-offset', bossHp);
+        dmgEl.style.setProperty('--bar-damage', damage);
+        hpBar.after(dmgEl);
+        dmgEl.addEventListener('animationend', () => dmgEl.remove());
+
+        hpTip.classList.remove('flash');
+        hpTip.offsetHeight;
+        hpTip.classList.add('flash');
+
+        hpBarWrap.classList.remove('shake');
+        hpBarWrap.offsetHeight;
+        hpBarWrap.classList.add('shake');
+        hpBarWrap.addEventListener('animationend', () => hpBarWrap.classList.remove('shake'), { once: true });
+      } else {
+        hpContainer.style.setProperty('--bar-value', bossHp);
+        hpBar.classList.remove('damaged', 'high', 'mid', 'low', 'zero');
+        hpBar.classList.add(pctTier(maxHp ? (bossHp / maxHp) * 100 : 0));
+        if (prevBossHp !== null && bossHp > prevBossHp) {
+          hpTip.classList.remove('flash');
+          hpTip.offsetHeight;
+          hpTip.classList.add('flash');
+        }
+      }
+
+      prevBossHp = bossHp;
+      hpLabel.textContent = bossHp + ' / ' + maxHp;
+      crystalsEl.textContent = 'Crystals: ' + (crystalCount || 0);
+      slotsEl.innerHTML = (slots.length ? slots : Array(7).fill(false)).slice(0, 7)
+        .map((filled, i) => '<div class="slot' + (filled ? ' filled' : '') + '" data-slot="' + i + '" title="Slot ' + (i + 1) + '"><i data-lucide="gem"></i></div>')
+        .join('');
+      lucide.createIcons();
       gameOverEl.classList.toggle('hidden', !gameOver);
     }
 

@@ -1,0 +1,12 @@
+---
+description: After every prompt, update the Pi and restart services unless the user says otherwise
+alwaysApply: true
+---
+
+# Deploy to Pi After Every Prompt
+
+**Default behavior:** After completing work on each prompt, deploy the updated code to the Raspberry Pi and restart the server.
+
+- **Pi host:** 192.168.8.142  **User:** ffboss  **Service:** ff2026-boss (systemd)
+- **Action:** Run `SSHPASS=xxx ./deploy.sh` from project root
+- **Override:** User can say "don't deploy" or "skip deploy" to skip this step
